@@ -86,9 +86,16 @@ public class MTCRadioAutoMuter implements IXposedHookLoadPackage {
 
         if (loadPackageParam.packageName.equals(targetmtc)) {
             String TARGET_CLASS = "android.microntek.service.MicrontekServer";
-            findAndHookMethod(TARGET_CLASS, loadPackageParam.classLoader, "onCreate", getMTCObjects);
+            try {
+                findAndHookMethod(TARGET_CLASS, loadPackageParam.classLoader, "onCreate", getMTCObjects);
+                log(tag, "Successfully hooked MicrontekService.onCreate()!");
+            } catch (XposedHelpers.ClassNotFoundError ex) {
+                log(tag, "Failed to hook  MicrontekService.onCreate()!");
+                throw (ex);
+            }
         }
 
+        // Bail if we still haven't got all the required objects
         if (!gotAllObjects) return;
 
         // Hook the method
@@ -98,6 +105,7 @@ public class MTCRadioAutoMuter implements IXposedHookLoadPackage {
             log(tag, "Successfully hooked MediaPlayer.start()!");
         } catch (XposedHelpers.ClassNotFoundError ex) {
             log(tag, "Failed hooking MediaPlayer.start()!");
+            throw (ex);
         }
     }
 }
