@@ -32,6 +32,7 @@ public class MTCRadioAutoMuter implements IXposedHookLoadPackage {
     private static Context mContext;
     private static Object microntekServer;
     private static final String tag = "MTCRadioAutoMute";
+    private static boolean gotAllObjects = false;
 
     public static void log(String tag, String msg) {
         Calendar c = Calendar.getInstance();
@@ -50,6 +51,8 @@ public class MTCRadioAutoMuter implements IXposedHookLoadPackage {
             mContext = (Context) getObjectField(param.thisObject, "mContext");
             // TODO This can probably be asked from the object above, but ok
             am = (AudioManager) getObjectField(param.thisObject, "am");
+
+            gotAllObjects = true;
         }
     };
 
@@ -86,7 +89,15 @@ public class MTCRadioAutoMuter implements IXposedHookLoadPackage {
             findAndHookMethod(TARGET_CLASS, loadPackageParam.classLoader, "onCreate", getMTCObjects);
         }
 
+        if (!gotAllObjects) return;
+
         // Hook the method
-        XposedHelpers.findAndHookMethod("android.media.MediaPlayer", loadPackageParam.classLoader, "start", muteMTCRadio);
+        // Try to always hook it because we cant know all the media apps
+        try {
+            XposedHelpers.findAndHookMethod("android.media.MediaPlayer", loadPackageParam.classLoader, "start", muteMTCRadio);
+            log(tag, "Successfully hooked MediaPlayer.start()!");
+        } catch (XposedHelpers.ClassNotFoundError ex) {
+            log(tag, "Failed hooking MediaPlayer.start()!");
+        }
     }
 }
