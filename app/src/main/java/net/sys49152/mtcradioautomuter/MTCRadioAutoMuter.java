@@ -1,20 +1,31 @@
 package net.sys49152.mtcradioautomuter;
 
+import android.app.Activity;
+import android.content.BroadcastReceiver;
 import android.content.Context;
+import android.content.ContextWrapper;
 import android.content.Intent;
 import android.media.AudioManager;
 import android.media.MediaPlayer;
+import android.media.audiofx.AudioEffect;
+import android.media.session.MediaSession;
+import android.os.Bundle;
+import android.util.Log;
 
+import java.lang.reflect.Constructor;
 import java.text.SimpleDateFormat;
 import java.util.Calendar;
 import java.util.Locale;
 
 import de.robv.android.xposed.IXposedHookLoadPackage;
+import de.robv.android.xposed.IXposedHookZygoteInit;
 import de.robv.android.xposed.XC_MethodHook;
+import de.robv.android.xposed.XSharedPreferences;
 import de.robv.android.xposed.XposedBridge;
 import de.robv.android.xposed.callbacks.XC_LoadPackage;
 import de.robv.android.xposed.XposedHelpers;
 
+import static de.robv.android.xposed.XposedHelpers.findAndHookConstructor;
 import static de.robv.android.xposed.XposedHelpers.findAndHookMethod;
 import static de.robv.android.xposed.XposedHelpers.getObjectField;
 import static de.robv.android.xposed.XposedHelpers.setIntField;
@@ -22,17 +33,17 @@ import static de.robv.android.xposed.XposedHelpers.setIntField;
 /**
  * Created by rferreira on 17-08-2016.
  *
- * Auto mutes MTC Radio everytime MediaPlayer.start() is called.
+ * Mutes MTC Radio every time a new audio session is started. is called.
+ * The idea is that this way it is not needed to exit MTCRadio before starting playback in another app.
  *
  * Based in parts on ExposedMTC by agentdr8 (https://github.com/agentdr8/XMTC)
  */
+
 public class MTCRadioAutoMuter implements IXposedHookLoadPackage {
 
-    private static AudioManager am;
-    private static Context mContext;
-    private static Object microntekServer;
-    private static final String tag = "MTCRadioAutoMute";
-    private static boolean gotAllObjects = false;
+    private static final String tag = "MTCRadioAutoMuter";
+    private final MTCRadioUnmuterHook mtcRadioUnmuterHook = new MTCRadioUnmuterHook();
+    private final MTCRadioMuterHook mtcRadioMuterHook = new MTCRadioMuterHook();
 
     public static void log(String tag, String msg) {
         Calendar c = Calendar.getInstance();
@@ -41,71 +52,30 @@ public class MTCRadioAutoMuter implements IXposedHookLoadPackage {
         XposedBridge.log("[" + formattedDate + "] " + tag + ": " + msg);
     }
 
-    public final XC_MethodHook getMTCObjects = new XC_MethodHook() {
-        @Override
-        protected void afterHookedMethod(MethodHookParam param) throws Throwable {
-
-            log(tag, "In MicrontekServer.onCreate");
-
-            microntekServer = param.thisObject;
-            mContext = (Context) getObjectField(param.thisObject, "mContext");
-            // TODO This can probably be asked from the object above, but ok
-            am = (AudioManager) getObjectField(param.thisObject, "am");
-
-            gotAllObjects = true;
-        }
-    };
-
-    public final XC_MethodHook muteMTCRadio = new XC_MethodHook() {
-        @Override
-        protected void afterHookedMethod(MethodHookParam param) throws Throwable {
-
-            log(tag, "In MediaPlayer.start()");
-
-//            Intent killradio = new Intent("com.microntek.bootcheck");
-//            String mode = intent.getStringExtra("mode");
-//            String srcpkg = intent.getStringExtra("pkg");
-//            killradio.putExtra("class", "");
-
-            am.setParameters("ctl_radio_mute=true");
-            am.setParameters("av_channel_exit=fm");
-            am.setParameters("av_channel_enter=sys");
-            setIntField(microntekServer, "mtcappmode", 3);
-
-            Intent intent = new Intent("com.microntek.canbusdisplay");
-            intent.putExtra("type", "off");
-            mContext.sendBroadcast(intent);
-        }
-    };
-
     @Override
-    public void handleLoadPackage(XC_LoadPackage.LoadPackageParam loadPackageParam) throws Throwable {
+    public void handleLoadPackage(XC_LoadPackage.LoadPackageParam loadPackageParam) {
 
-        String targetmtc = "android.microntek.service";
         String radiopkg = "com.microntek.radio";
 
-        if (loadPackageParam.packageName.equals(targetmtc)) {
-            String TARGET_CLASS = "android.microntek.service.MicrontekServer";
+        //log(tag, "In handleLoadPackage!");
+        log(tag, "Loading: " + loadPackageParam.packageName);
+
+        if (loadPackageParam.packageName.equals(radiopkg)) {
+            String TARGET_CLASS = "com.microntek.radio.RadioActivity";
+
             try {
-                findAndHookMethod(TARGET_CLASS, loadPackageParam.classLoader, "onCreate", getMTCObjects);
-                log(tag, "Successfully hooked MicrontekService.onCreate()!");
+                findAndHookMethod(TARGET_CLASS, loadPackageParam.classLoader, "onResume", mtcRadioUnmuterHook);
+                log(tag, "Successfully hooked RadioActivity.onResume()!");
             } catch (XposedHelpers.ClassNotFoundError ex) {
-                log(tag, "Failed to hook  MicrontekService.onCreate()!");
-                throw (ex);
+                log(tag, "Failed to hook RadioActivity.onResume()!");
             }
-        }
-
-        // Bail if we still haven't got all the required objects
-        if (!gotAllObjects) return;
-
-        // Hook the method
-        // Try to always hook it because we cant know all the media apps
-        try {
-            XposedHelpers.findAndHookMethod("android.media.MediaPlayer", loadPackageParam.classLoader, "start", muteMTCRadio);
-            log(tag, "Successfully hooked MediaPlayer.start()!");
-        } catch (XposedHelpers.ClassNotFoundError ex) {
-            log(tag, "Failed hooking MediaPlayer.start()!");
-            throw (ex);
+        } else {
+            try {
+                XposedHelpers.findAndHookMethod(ContextWrapper.class, "sendBroadcast", Intent.class, mtcRadioMuterHook);
+                log(tag, "Successfully hooked ContextWrapper.sendBroadcast!");
+            } catch (XposedHelpers.ClassNotFoundError ex) {
+                log(tag, "Failed hooking ContextWrapper.sendBroadcast!");
+            }
         }
     }
 }
