@@ -13,7 +13,7 @@ import de.robv.android.xposed.XC_MethodHook;
  */
 public class MTCRadioUnmuterHook extends XC_MethodHook {
 
-    private final String tag = "MTCRadioUnmuterHook";
+    private static final String tag = "MTCRadioUnmuterHook";
 
     @Override
     protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
