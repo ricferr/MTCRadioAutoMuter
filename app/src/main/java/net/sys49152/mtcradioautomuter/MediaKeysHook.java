@@ -19,35 +19,42 @@ import de.robv.android.xposed.XC_MethodHook;
  */
 public class MediaKeysHook extends XC_MethodHook {
 
+    public static final String setCurrentModeToRadio = "net.sys49152.intent.radio_is_on";
+    public static final String setCurrentModeToMusic = "net.sys49152.intent.music_is_on";
     private static final String tag = "MediaKeysHook";
+    private boolean isMusicOn = true;
 
-    private static void cmdPlayer(Context ctx, String cmd) {
+    private void cmdPlayer(Context ctx, String cmd) {
 
         AudioManager am = (AudioManager) ctx.getSystemService(Context.AUDIO_SERVICE);
 
-        if (!am.isMusicActive()) {
+        if (!isMusicOn) {
             // Supposedly no music playing so we wont continue
             MTCRadioAutoMuter.log(tag, "No music playing!");
             return;
         }
 
-        if (cmd.equals("play")) {
-            am.dispatchMediaKeyEvent(new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE));
-            am.dispatchMediaKeyEvent(new KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE));
-        } else if (cmd.equals("next")) {
-            am.dispatchMediaKeyEvent(new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_MEDIA_NEXT));
-            am.dispatchMediaKeyEvent(new KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_MEDIA_NEXT));
-        } else if (cmd.equals("prev")) {
-            am.dispatchMediaKeyEvent(new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_MEDIA_PREVIOUS));
-            am.dispatchMediaKeyEvent(new KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_MEDIA_PREVIOUS));
-        } else if (cmd.equals("stop")) {
-            am.dispatchMediaKeyEvent(new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_MEDIA_STOP));
-            am.dispatchMediaKeyEvent(new KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_MEDIA_STOP));
+        int keyEvent = -1;
+        switch (cmd) {
+            case "play":
+                keyEvent = KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE;
+                break;
+            case "next":
+                keyEvent = KeyEvent.KEYCODE_MEDIA_NEXT;
+                break;
+            case "prev":
+                keyEvent = KeyEvent.KEYCODE_MEDIA_PREVIOUS;
+                break;
+            case "stop":
+                keyEvent = KeyEvent.KEYCODE_MEDIA_STOP;
+                break;
         }
+
+        am.dispatchMediaKeyEvent(new KeyEvent(KeyEvent.ACTION_DOWN, keyEvent));
+        am.dispatchMediaKeyEvent(new KeyEvent(KeyEvent.ACTION_UP, keyEvent));
+
         MTCRadioAutoMuter.log(tag, "Sent media key!");
     }
-
-
 
     @Override
     protected void afterHookedMethod(MethodHookParam param) throws Throwable {
@@ -85,9 +92,26 @@ public class MediaKeysHook extends XC_MethodHook {
                     }
             }
         };
-        IntentFilter intentfilter = new IntentFilter();
-        intentfilter.addAction("com.microntek.irkeyDown");
-        intentfilter.addAction("com.microntek.irkeyUp");
-        ctx.registerReceiver(mtckeyproc, intentfilter);
+        IntentFilter keysIntentFilter = new IntentFilter();
+        keysIntentFilter.addAction("com.microntek.irkeyDown");
+        keysIntentFilter.addAction("com.microntek.irkeyUp");
+        ctx.registerReceiver(mtckeyproc, keysIntentFilter);
+
+        BroadcastReceiver modeReceiver = new BroadcastReceiver() {
+            @Override
+            public void onReceive(Context context, Intent intent) {
+                if (intent.getAction().equals(setCurrentModeToMusic)) {
+                    isMusicOn = true;
+                    MTCRadioAutoMuter.log(tag, "Music set on!");
+                } else if (intent.getAction().equals(setCurrentModeToRadio)) {
+                    isMusicOn = false;
+                    MTCRadioAutoMuter.log(tag, "Music set off!");
+                }
+            }
+        };
+        IntentFilter modeIntentFilter = new IntentFilter();
+        modeIntentFilter.addAction(setCurrentModeToMusic);
+        modeIntentFilter.addAction(setCurrentModeToRadio);
+        ctx.registerReceiver(modeReceiver, modeIntentFilter);
     }
 }

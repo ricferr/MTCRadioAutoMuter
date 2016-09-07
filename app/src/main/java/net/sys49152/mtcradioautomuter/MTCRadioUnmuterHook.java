@@ -1,6 +1,7 @@
 package net.sys49152.mtcradioautomuter;
 
 import android.content.Context;
+import android.content.Intent;
 import android.media.AudioManager;
 
 import de.robv.android.xposed.XC_MethodHook;
@@ -27,5 +28,9 @@ public class MTCRadioUnmuterHook extends XC_MethodHook {
         MTCRadioAutoMuter.log(tag, "Unmuded MTC Radio!");
 
         // TODO Again we should change mtcapp but it's not acessible
+
+        Intent setRadioOn = new Intent();
+        setRadioOn.setAction(MediaKeysHook.setCurrentModeToRadio);
+        ctx.sendBroadcast(setRadioOn);
     }
 }

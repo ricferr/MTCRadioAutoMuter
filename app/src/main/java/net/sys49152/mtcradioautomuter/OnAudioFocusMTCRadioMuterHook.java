@@ -1,8 +1,12 @@
 package net.sys49152.mtcradioautomuter;
 
+import android.content.Context;
+import android.content.ContextWrapper;
+import android.content.Intent;
 import android.media.AudioManager;
 
 import de.robv.android.xposed.XC_MethodHook;
+import de.robv.android.xposed.XposedHelpers;
 
 /**
  * Hook for AudioManager.requestAudioFocus that mutes the radio if an app requests the audio focus.
@@ -24,6 +28,10 @@ public class OnAudioFocusMTCRadioMuterHook extends XC_MethodHook {
 
         // This is an AudioManager
         AudioManager am = (AudioManager) param.thisObject;
+
+        // This has a mContext field with the Context according to Google source.
+        Context ctx = (Context) XposedHelpers.getObjectField(param.thisObject, "mContext");
+
         am.setParameters("ctl_radio_mute=true");
         am.setParameters("av_channel_exit=fm");
         am.setParameters("av_channel_enter=sys");
@@ -40,5 +48,10 @@ public class OnAudioFocusMTCRadioMuterHook extends XC_MethodHook {
 //        setIntField(getMicrontekServer(), "mtcappmode", 3);
 
         MTCRadioAutoMuter.log(tag, "Muted MTCRadio!");
+
+        Intent setMusicOn = new Intent();
+        setMusicOn.setAction(MediaKeysHook.setCurrentModeToMusic);
+        ctx.sendBroadcast(setMusicOn);
+
     }
 }
